@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 
 class PromptScreen extends StatefulWidget {
-  const PromptScreen({super.key});
+  final String imagePath;
+  final double selectedRatio; // Tinatanggap ang ratio from CaptureScreen
+
+  const PromptScreen({
+    super.key,
+    required this.imagePath,
+    this.selectedRatio = 3 / 4, // Default ratio
+  });
 
   @override
   State<PromptScreen> createState() => _PromptScreenState();
@@ -13,14 +22,19 @@ class _PromptScreenState extends State<PromptScreen> {
   bool _isGenerating = false;
   bool _isGenerated = false;
 
+  // Colors
+  final Color primaryColor = const Color(0xFFC290E4);
+  final Color highlightPink = const Color(0xFFE94B77);
+
   void _generateAIImage() async {
-    setState(() {
-      _isGenerating = true;
-    });
-
-    // Simulate AI generation delay
+    if (_promptController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a prompt first!")),
+      );
+      return;
+    }
+    setState(() => _isGenerating = true);
     await Future.delayed(const Duration(seconds: 3));
-
     if (mounted) {
       setState(() {
         _isGenerating = false;
@@ -32,197 +46,181 @@ class _PromptScreenState extends State<PromptScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E3FE), // Violet background
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFFC290E4)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          "Magic Generation",
-          style: GoogleFonts.dmSerifDisplay(color: const Color(0xFF1A1A1A)),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Describe your style",
-              style: GoogleFonts.dmSerifDisplay(
-                fontSize: 24, 
-                color: const Color(0xFFE94B77), // Pink for contrast
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              "Our AI will transform your photo based on your prompt.",
-              style: TextStyle(color: Colors.black.withOpacity(0.5)),
-            ),
-            const SizedBox(height: 30),
-            
-            // Preview Box
-            AspectRatio(
-              aspectRatio: 3 / 4,
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: const Color(0xFFC290E4).withOpacity(0.5), 
-                    width: 3,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE94B77).withOpacity(0.1),
-                      blurRadius: 15,
-                    )
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(27),
-                  child: _isGenerating
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(color: Color(0xFFE94B77)),
-                            const SizedBox(height: 20),
-                            Text(
-                              "Generating Magic...",
-                              style: TextStyle(color: const Color(0xFFC290E4), fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        )
-                      : _isGenerated
-                          ? const Center(child: Icon(Icons.auto_awesome, size: 80, color: Color(0xFFE94B77)))
-                          : const Center(child: Icon(Icons.photo_outlined, size: 80, color: Color(0xFFF3E3FE))),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 30),
-            
-            if (!_isGenerated) ...[
-              // Prompt Input Box
-              TextField(
-                controller: _promptController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: "Example: Retro 90s aesthetic, dreamy lighting, soft pink tones...",
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(color: const Color(0xFFC290E4).withOpacity(0.3)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(color: const Color(0xFFC290E4).withOpacity(0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(color: Color(0xFFE94B77), width: 2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-              
-              // Generate Button (Combined Colors)
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(50),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFC290E4), Color(0xFFE94B77)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE94B77).withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    )
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: _isGenerating ? null : _generateAIImage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-                  ),
-                  child: const Text(
-                    "Generate AI Photo ✨",
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ] else ...[
-              // Download Button (Combined Colors)
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(50),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFE94B77), Color(0xFFC290E4)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFC290E4).withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    )
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("AI Photo saved to Gallery!")),
-                    );
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: const Color(0xFFF3E3FE),
+      resizeToAvoidBottomInset: false, // Iwas overflow sa keyboard
+      body: Stack(
+        children: [
+          // 1. Grid Background
+          const Positioned.fill(child: GridBackgroundPainter()),
+
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- HEADER ---
+                  Row(
                     children: [
-                      Icon(Icons.download_rounded, color: Colors.white),
-                      SizedBox(width: 12),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryColor),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 12),
                       Text(
-                        "Download PNG",
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        "Enhance with AI",
+                        style: GoogleFonts.dmSerifDisplay(
+                          fontSize: 26,
+                          color: const Color(0xFF1A1A1A),
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 15),
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isGenerated = false;
-                      _promptController.clear();
-                    });
-                  },
-                  child: const Text(
-                    "Try another prompt", 
-                    style: TextStyle(color: Color(0xFFE94B77), fontWeight: FontWeight.bold),
+
+                  const SizedBox(height: 20),
+
+                  // --- DYNAMIC PREVIEW BOX  ---
+                  Expanded(
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: widget.selectedRatio, // Eto yung ratio mula sa Capture
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(30),
+                            // Solid White Border
+                            border: Border.all(color: Colors.white, width: 8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryColor.withOpacity(0.3),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                              )
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(22),
+                            child: kIsWeb
+                                ? Image.network(widget.imagePath, fit: BoxFit.cover)
+                                : Image.file(File(widget.imagePath), fit: BoxFit.cover),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+
+                  const SizedBox(height: 25),
+
+                  // --- CONTROLS SECTION ---
+                  if (!_isGenerated) ...[
+                    TextField(
+                      controller: _promptController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: "Describe your vibe...",
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(18),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: primaryColor, width: 2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isGenerating ? null : _generateAIImage,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                        ),
+                        child: _isGenerating
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                            : const Text(
+                          "Generate",
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Success State
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.download_rounded, color: Colors.white),
+                            SizedBox(width: 12),
+                            Text("Download PNG", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => setState(() => _isGenerated = false),
+                        child: Text(
+                          "Try another prompt",
+                          style: TextStyle(color: highlightPink, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                ],
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+// --- GRID PAINTER ---
+class GridBackgroundPainter extends StatelessWidget {
+  const GridBackgroundPainter({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _GridPainter());
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFC290E4).withOpacity(0.12)
+      ..strokeWidth = 1.0;
+    const double gap = 30.0;
+    for (double i = 0; i < size.width; i += gap) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (double i = 0; i < size.height; i += gap) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
