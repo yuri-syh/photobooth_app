@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../services/ai_prompt_service.dart';
 
 class PromptScreen extends StatefulWidget {
   final String imagePath;
-  final double selectedRatio; // Tinatanggap ang ratio from CaptureScreen
+  final double selectedRatio;
 
   const PromptScreen({
     super.key,
     required this.imagePath,
-    this.selectedRatio = 3 / 4, // Default ratio
+    this.selectedRatio = 3 / 4,
   });
 
   @override
@@ -19,27 +21,66 @@ class PromptScreen extends StatefulWidget {
 
 class _PromptScreenState extends State<PromptScreen> {
   final TextEditingController _promptController = TextEditingController();
-  bool _isGenerating = false;
-  bool _isGenerated = false;
 
   // Colors
   final Color primaryColor = const Color(0xFFC290E4);
   final Color highlightPink = const Color(0xFFE94B77);
 
-  void _generateAIImage() async {
-    if (_promptController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a prompt first!")),
-      );
+  // State
+  bool _isGenerated = false;
+  bool _isGenerating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AIPromptService>(
+        context,
+        listen: false,
+      ).setOriginalPhoto(widget.imagePath);
+    });
+  }
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _generateAIImage() async {
+    final prompt = _promptController.text.trim();
+    if (prompt.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a prompt')));
       return;
     }
+
     setState(() => _isGenerating = true);
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) {
-      setState(() {
-        _isGenerating = false;
-        _isGenerated = true;
-      });
+
+    try {
+      final service = Provider.of<AIPromptService>(context, listen: false);
+      await service.generateAIImage(prompt);
+
+      if (service.hasGeneratedImage) {
+        setState(() => _isGenerated = true);
+      } else if (service.errorMessage != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(service.errorMessage!)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
     }
   }
 
@@ -65,7 +106,10 @@ class _PromptScreenState extends State<PromptScreen> {
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryColor),
+                        icon: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: primaryColor,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 12),
@@ -85,7 +129,8 @@ class _PromptScreenState extends State<PromptScreen> {
                   Expanded(
                     child: Center(
                       child: AspectRatio(
-                        aspectRatio: widget.selectedRatio, // Eto yung ratio mula sa Capture
+                        aspectRatio: widget
+                            .selectedRatio, // Eto yung ratio mula sa Capture
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black,
@@ -97,14 +142,27 @@ class _PromptScreenState extends State<PromptScreen> {
                                 color: primaryColor.withOpacity(0.3),
                                 blurRadius: 20,
                                 spreadRadius: 2,
-                              )
+                              ),
                             ],
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(22),
-                            child: kIsWeb
-                                ? Image.network(widget.imagePath, fit: BoxFit.cover)
-                                : Image.file(File(widget.imagePath), fit: BoxFit.cover),
+                            child: Consumer<AIPromptService>(
+                              builder: (context, service, child) {
+                                final imagePath =
+                                    service.generatedImagePath ??
+                                    widget.imagePath;
+                                return kIsWeb
+                                    ? Image.network(
+                                        imagePath,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Image.file(
+                                        File(imagePath),
+                                        fit: BoxFit.cover,
+                                      );
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -134,6 +192,42 @@ class _PromptScreenState extends State<PromptScreen> {
                       ),
                     ),
                     const SizedBox(height: 15),
+                    // Error display
+                    Consumer<AIPromptService>(
+                      builder: (context, service, child) {
+                        if (service.errorMessage != null) {
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 15),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    service.errorMessage!,
+                                    style: TextStyle(
+                                      color: Colors.red.shade700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -142,18 +236,27 @@ class _PromptScreenState extends State<PromptScreen> {
                           backgroundColor: primaryColor,
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(50),
+                          ),
                         ),
                         child: _isGenerating
                             ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Text(
-                          "Generate",
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                                "Generate",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                   ] else ...[
@@ -165,14 +268,22 @@ class _PromptScreenState extends State<PromptScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(50),
+                          ),
                         ),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.download_rounded, color: Colors.white),
                             SizedBox(width: 12),
-                            Text("Download PNG", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            Text(
+                              "Download PNG",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -182,7 +293,10 @@ class _PromptScreenState extends State<PromptScreen> {
                         onPressed: () => setState(() => _isGenerated = false),
                         child: Text(
                           "Try another prompt",
-                          style: TextStyle(color: highlightPink, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: highlightPink,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -221,6 +335,7 @@ class _GridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
     }
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
