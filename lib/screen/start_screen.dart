@@ -87,7 +87,7 @@ class StartScreen extends StatelessWidget {
                     Text(
                       "Photobooth",
                       style: GoogleFonts.dmSerifDisplay(
-                        fontSize: 55,
+                        fontSize: 50,
                         color: darkText,
                         height: 1.0,
                       ),
@@ -96,7 +96,7 @@ class StartScreen extends StatelessWidget {
                     Text(
                       "Experience",
                       style: GoogleFonts.dmSerifDisplay(
-                        fontSize: 55,
+                        fontSize: 50,
                         color: darkText,
                         height: 1.0,
                       ),

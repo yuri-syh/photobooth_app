@@ -4,6 +4,7 @@ import 'package:dotted_border/dotted_border.dart';
 import 'package:camera/camera.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'prompt_screen.dart';
 import 'gallery_screen.dart';
 
@@ -20,7 +21,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   String? capturedImagePath;
   double _selectedAspectRatio = 3 / 4;
 
-  // Camera flipping variables
   List<CameraDescription> _cameras = [];
   int _selectedCameraIndex = 0;
 
@@ -33,23 +33,41 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSavedRatio();
     _setupCamera();
+  }
+
+  /// 📐 Load saved ratio from previous session
+  Future<void> _loadSavedRatio() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedRatio = prefs.getDouble('selected_aspect_ratio');
+    if (savedRatio != null) {
+      setState(() => _selectedAspectRatio = savedRatio);
+    }
+  }
+
+  /// 📐 Save selected ratio
+  Future<void> _saveRatio(double ratio) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('selected_aspect_ratio', ratio);
   }
 
   Future<void> _setupCamera() async {
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) return;
-
-      // I-initialize ang camera gamit ang default index
       await _initCameraController(_cameras[_selectedCameraIndex]);
     } catch (e) {
       debugPrint("Camera Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Camera Error: $e')),
+        );
+      }
     }
   }
 
   Future<void> _initCameraController(CameraDescription cameraDescription) async {
-    // I-dispose muna ang lumang controller bago mag-switch
     if (_controller != null) {
       await _controller!.dispose();
     }
@@ -72,9 +90,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   Future<void> _flipCamera() async {
     if (_cameras.length < 2) return;
-
-    setState(() => _isInitialized = false); // Loader habang nag-swiswitch
-
+    setState(() => _isInitialized = false);
     _selectedCameraIndex = (_selectedCameraIndex + 1) % _cameras.length;
     await _initCameraController(_cameras[_selectedCameraIndex]);
   }
@@ -129,7 +145,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
                             color: Colors.black,
                             borderRadius: BorderRadius.circular(30),
                             border: Border.all(color: Colors.white, width: 8),
-                            boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryColor.withOpacity(0.3),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                              ),
+                            ],
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(22),
@@ -146,7 +168,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
                                       child: CameraPreview(_controller!),
                                     ),
                                   )
-                                      : const Center(child: CircularProgressIndicator(color: Colors.white))
+                                      : const Center(
+                                    child: CircularProgressIndicator(color: Colors.white),
+                                  )
                                 else
                                   kIsWeb
                                       ? Image.network(capturedImagePath!, fit: BoxFit.cover)
@@ -185,13 +209,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildIconButton(Icons.photo_library_rounded, onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const GalleryScreen()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const GalleryScreen()),
+                        );
                       }),
                       GestureDetector(
                         onTap: () async {
                           if (capturedImagePath == null) {
                             await _takePicture();
                           } else {
+                            // Save ratio before navigating
+                            await _saveRatio(_selectedAspectRatio);
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -213,8 +243,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
                             radius: 35,
                             backgroundColor: capturedImagePath == null ? primaryColor : highlightPink,
                             child: Icon(
-                                capturedImagePath == null ? Icons.camera : Icons.check,
-                                color: Colors.white, size: 30),
+                              capturedImagePath == null ? Icons.camera : Icons.check,
+                              color: Colors.white,
+                              size: 30,
+                            ),
                           ),
                         ),
                       ),
@@ -222,13 +254,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
                         capturedImagePath == null ? Icons.flip_camera_ios_outlined : Icons.refresh_rounded,
                         onTap: () {
                           if (capturedImagePath == null) {
-                            // mag-fflip ng camera
                             _flipCamera();
                           } else {
-                            // I-reset ang view para makapag-retake
-                            setState(() {
-                              capturedImagePath = null;
-                            });
+                            setState(() => capturedImagePath = null);
                           }
                         },
                       ),
@@ -251,6 +279,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       onTap: () {
         if (!isDisabled) {
           setState(() => _selectedAspectRatio = ratio);
+          _saveRatio(ratio); // Save when selected
         }
       },
       child: Opacity(
@@ -258,17 +287,21 @@ class _CaptureScreenState extends State<CaptureScreen> {
         child: DottedBorder(
           color: primaryColor,
           strokeWidth: isSelected ? 3 : 1.5,
-          dashPattern: isSelected ? [1, 0] : [6, 3],
+          dashPattern: isSelected ? const [1, 0] : const [6, 3],
           borderType: BorderType.RRect,
           radius: const Radius.circular(15),
           child: Container(
-            width: 65, height: 65,
+            width: 65,
+            height: 65,
             decoration: BoxDecoration(
               color: isSelected ? primaryColor.withOpacity(0.2) : Colors.transparent,
               borderRadius: BorderRadius.circular(15),
             ),
             child: Center(
-              child: Text(label, style: GoogleFonts.dmSerifDisplay(fontSize: 16, color: primaryColor)),
+              child: Text(
+                label,
+                style: GoogleFonts.dmSerifDisplay(fontSize: 16, color: primaryColor),
+              ),
             ),
           ),
         ),
@@ -280,8 +313,52 @@ class _CaptureScreenState extends State<CaptureScreen> {
     return IgnorePointer(
       child: Stack(
         children: [
-          Column(children: [Expanded(child: Container(decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.2)))))), Expanded(child: Container(decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.2)))))), Expanded(child: Container())]),
-          Row(children: [Expanded(child: Container(decoration: BoxDecoration(border: Border(right: BorderSide(color: Colors.white.withOpacity(0.2)))))), Expanded(child: Container(decoration: BoxDecoration(border: Border(right: BorderSide(color: Colors.white.withOpacity(0.2)))))), Expanded(child: Container())]),
+          Column(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.2)),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.2)),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(child: Container()),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: Colors.white.withOpacity(0.2)),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(color: Colors.white.withOpacity(0.2)),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(child: Container()),
+            ],
+          ),
         ],
       ),
     );
@@ -290,13 +367,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget _buildIconButton(IconData icon, {VoidCallback? onTap}) {
     return Container(
       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-      child: IconButton(icon: Icon(icon, color: primaryColor, size: 26), onPressed: onTap),
+      child: IconButton(
+        icon: Icon(icon, color: primaryColor, size: 26),
+        onPressed: onTap,
+      ),
     );
   }
 }
 
 class GridBackgroundPainter extends StatelessWidget {
   const GridBackgroundPainter({super.key});
+
   @override
   Widget build(BuildContext context) {
     return CustomPaint(painter: _GridPainter());
@@ -306,10 +387,18 @@ class GridBackgroundPainter extends StatelessWidget {
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFC290E4).withOpacity(0.12)..strokeWidth = 1.0;
-    for (double i = 0; i < size.width; i += 30.0) { canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint); }
-    for (double i = 0; i < size.height; i += 30.0) { canvas.drawLine(Offset(0, i), Offset(size.width, i), paint); }
+    final paint = Paint()
+      ..color = const Color(0xFFC290E4).withOpacity(0.12)
+      ..strokeWidth = 1.0;
+
+    for (double i = 0; i < size.width; i += 30.0) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (double i = 0; i < size.height; i += 30.0) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
